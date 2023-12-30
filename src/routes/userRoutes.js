@@ -1,75 +1,81 @@
-// src/routes/userRoutes.js
-
 const express = require('express');
 const router = express.Router();
 const User = require('../db/models/user');
 const bcrypt = require('bcrypt');
+const winston = require('winston'); // Import Winston for logging
 
-
+// Create a logger instance
+const logger = winston.createLogger({
+  level: 'info', // Set the minimum logging level
+  format: winston.format.simple(), // Use a simple log format
+  transports: [
+    new winston.transports.Console(), // Log to the console
+    new winston.transports.File({ filename: 'userRoutes.log' }), // Log to a file
+  ],
+});
 
 // Define your routes and middleware here
 
-//User registration routes
+// User registration routes
 router.get('/register', (req, res) => {
-  res.send('User registration page'); // replace this with your registration page HTML file
+  res.send('User registration page');
 });
 
 router.post('/register', async (req, res) => {
-    try{
-        const {username, email, password, fullName} = req.body; // destructure the request body
+  try {
+    const { username, email, password, fullName } = req.body;
 
-        //check if the user already exists
-        const userExists = await User.findOne({$or: [{username}, {email}]});
-        if (userExists){
-            return res.status(400).json({message: 'User already exists'});
-        }
+    logger.info('Received registration request:', { username, email, fullName });
 
-        //create a new user
-        const newUser = new User({username, email, password, fullName});
-
-        //save the user to the database.
-        await newUser.save();
-        //redirect to login page by res.redirect('/login');
-        res.status(201).json({message: 'User created successfully'}); //comment this out if you are redirecting to the login page. 
-    } catch(error){
-        console.error('Error during user registration:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+    const userExists = await User.findOne({ $or: [{ username }, { email }] });
+    if (userExists) {
+      logger.warn('User already exists:', { username, email });
+      return res.status(400).json({ message: 'User already exists' });
     }
+
+    const newUser = new User({ username, email, password, fullName });
+    await newUser.save();
+
+    logger.info('User created successfully:', { username, email });
+    res.status(201).json({ message: 'User created successfully' });
+  } catch (error) {
+    logger.error('Error during user registration:', { error });
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
-//User login routes
-router.get('/login', (req,res)=>{
-    res.send('User login page'); //replace this with your login page HTML file
+// User login routes
+router.get('/login', (req, res) => {
+  res.send('User login page');
 });
 
 router.post('/login', async (req, res) => {
-    try{
-        const {username, password} = req.body; // destructure the request body
+  try {
+    const { username, password } = req.body;
 
-        //find the user in the database
-        const user = await User.findOne({ username });
+    logger.info('Received login request:', { username });
 
-        //check if the user exists
-        if (!user){
-            return res.status(400).json({message: 'User does not exist'});
-        }
+    const user = await User.findOne({ username });
 
-        //check if the password is correct
-        if (password !== user.password){
-            return res.status(401).json({message: 'Incorrect password'});
-        }
-
-        // create a JSON Web Token if username and password are correct
-        // const token = jwt.sign({username}, 'secret', {expiresIn: '24h'}); //change the secret to a long random string in production
-
-        //send the JWT to the user
-        res.status(200).json({message: 'User logged in successfully', token}); //comment this out if you are redirecting to the user profile page
-        //redirect to user profile page by res.redirect('/profile');
-
-    } catch(error){
-        console.error('Error during user login:', error);
-        res.status(500).json({ error: 'Internal Server Error' });
+    if (!user) {
+      logger.warn('User does not exist:', { username });
+      return res.status(400).json({ message: 'User does not exist' });
     }
+
+    if (password !== user.password) {
+      logger.warn('Incorrect password:', { username });
+      return res.status(401).json({ message: 'Incorrect password' });
+    }
+
+    // Create a JSON Web Token if username and password are correct
+    // const token = jwt.sign({ username }, 'secret', { expiresIn: '24h' });
+
+    logger.info('User logged in successfully:', { username });
+    res.status(200).json({ message: 'User logged in successfully' });
+  } catch (error) {
+    logger.error('Error during user login:', { error });
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 //User profile management routes
