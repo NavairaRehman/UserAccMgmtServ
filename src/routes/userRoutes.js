@@ -3,6 +3,8 @@ const router = express.Router();
 const User = require('../db/models/user');
 const bcrypt = require('bcrypt');
 const winston = require('winston'); // Import Winston for logging
+const jwt = require('jsonwebtoken'); // Import JWT for creating tokens
+const passport = require('../../passport-config'); // Import passport-config.js
 
 // Create a logger instance
 const logger = winston.createLogger({
@@ -25,7 +27,20 @@ router.post('/register', async (req, res) => {
   try {
     const { username, email, password, fullName } = req.body;
 
+  
     logger.info('Received registration request:', { username, email, fullName });
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Validate password complexity
+    if (!password || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters long' });
+    }
+
 
     const userExists = await User.findOne({ $or: [{ username }, { email }] });
     if (userExists) {
@@ -62,13 +77,17 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'User does not exist' });
     }
 
-    if (password !== user.password) {
+    //use bycrypt to compare the password entered by the user with the password stored in the database
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      
       logger.warn('Incorrect password:', { username });
       return res.status(401).json({ message: 'Incorrect password' });
     }
 
-    // Create a JSON Web Token if username and password are correct
-    // const token = jwt.sign({ username }, 'secret', { expiresIn: '24h' });
+    //Create a JSON Web Token if username and password are correct
+    const token = jwt.sign({sub: user._id,username: user.username}, 'your-secret-key', { expiresIn: '7d' });
 
     logger.info('User logged in successfully:', { username });
     res.status(200).json({ message: 'User logged in successfully' });
@@ -81,8 +100,7 @@ router.post('/login', async (req, res) => {
 //User profile management routes
 
 //get user profile
-route.get('/profile', (req, res) => {
-    router.get('/profile', async (req, res) => {
+router.get('/profile',passport.authenticate('jwt', {session : false}), async (req, res) => {
         try{
             //fetch user profile from the database
             const userProfile = await User.findOne({username: req.user.username});
@@ -98,40 +116,46 @@ route.get('/profile', (req, res) => {
             res.status(500).json({ error: 'Internal Server Error' });
         }
     });
-});
 
 // Route to update user profile information
-router.put('/profile', async (req, res) => {
-    try {
-      const { _id, username, email, fullName, bio, profilePicture } = req.body;
-  
-      // Build the update object based on the fields provided in the request body
-      const updateObject = {};
-      if (fullName) updateObject.fullName = fullName;
-      if (bio) updateObject.bio = bio;
-      if (profilePicture) updateObject.profilePicture = profilePicture;
-      if (email) updateObject.email = email;
-      if (username) updateObject.username = username;
+router.put('/profile',passport.authenticate('jwt',{ session : false }) ,async (req, res) => {
+  try {
+    const { username, email, fullName, bio, profilePicture } = req.body;
 
-  
-      // Update user profile information in the database
-      const updatedProfile = await User.findByIdAndUpdate(
-        _id,
-        { $set: updateObject }, // Using $set to update only specified fields
-        { new: true } // Return the updated document
-      );
-  
-      if (!updatedProfile) {
-        return res.status(404).json({ error: 'User profile not found' });
-      }
-  
-      // Respond with the updated user profile information
-      res.status(200).json(updatedProfile); // replace this with your user profile page HTML file
-    } catch (error) {
-      console.error('Error updating user profile:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
+    // Validate that at least one field is provided for the update
+    if (!fullName && !bio && !profilePicture && !email && !username) {
+      return res.status(400).json({ error: 'At least one field is required for the update' });
     }
-  });
+
+    // Build the update object based on the fields provided in the request body
+    const updateObject = {};
+    if (fullName) updateObject.fullName = fullName;
+    if (bio) updateObject.bio = bio;
+    if (profilePicture) updateObject.profilePicture = profilePicture;
+    if (email) updateObject.email = email;
+    if (username) updateObject.username = username;
+
+    // Update user profile information in the database
+    const updatedProfile = await User.findOneAndUpdate(
+      { username: username }, // Find the user profile by username
+      { $set: updateObject }, // Update the user profile with the updateObject
+      { new: true } // Return the updated user profile
+    );
+
+    if (!updatedProfile) {
+      return res.status(404).json({ error: 'User profile not found' });
+    }
+
+    // Respond with the updated user profile information
+    res.status(200).json({
+      message: 'User profile updated successfully',
+      userProfile: updatedProfile
+    });
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
   // Route to delete user profile
 router.delete('/profile', async (req, res) => {
@@ -157,6 +181,16 @@ router.delete('/profile', async (req, res) => {
   router.put('/change-password', async (req, res) => {
     try {
       const { username, email, currentPassword, newPassword } = req.body;
+
+      // Validate current password
+    if (!currentPassword || currentPassword.length < 8) {
+      return res.status(400).json({ error: 'Current password must be provided and at least 8 characters long' });
+    }
+
+     // Validate new password complexity
+     if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters long' });
+    }
   
       // Determine which field (username or email) was provided
       const userField = username ? 'username' : 'email';

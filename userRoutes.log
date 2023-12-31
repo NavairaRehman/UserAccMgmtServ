@@ -1,0 +1,28 @@
+info: Received registration request:
+error: Error during user registration: {"error":{"_message":"User validation failed","errors":{"email":{"kind":"required","message":"Path `email` is required.","name":"ValidatorError","path":"email","properties":{"message":"Path `email` is required.","path":"email","type":"required"}},"fullName":{"kind":"required","message":"Path `fullName` is required.","name":"ValidatorError","path":"fullName","properties":{"message":"Path `fullName` is required.","path":"fullName","type":"required"}},"password":{"kind":"required","message":"Path `password` is required.","name":"ValidatorError","path":"password","properties":{"message":"Path `password` is required.","path":"password","type":"required"}},"username":{"kind":"required","message":"Path `username` is required.","name":"ValidatorError","path":"username","properties":{"message":"Path `username` is required.","path":"username","type":"required"}}},"message":"User validation failed: username: Path `username` is required., email: Path `email` is required., password: Path `password` is required., fullName: Path `fullName` is required.","name":"ValidationError"}}
+info: Received registration request: {"email":"testuser@example.com","fullName":"Test User","username":"testuser"}
+info: User created successfully: {"email":"testuser@example.com","username":"testuser"}
+info: Received registration request: {"email":"testuser@example.com","fullName":"Test User","username":"testuser"}
+warn: User already exists: {"email":"testuser@example.com","username":"testuser"}
+info: Received login request: {"username":"testuser"}
+warn: Incorrect password: {"username":"testuser"}
+info: Received login request: {"username":"testuser"}
+warn: Incorrect password: {"username":"testuser"}
+info: Received login request: {"username":"testuser"}
+warn: Incorrect password: {"username":"testuser"}
+info: Received login request: {"username":"testuser"}
+warn: Incorrect password: {"username":"testuser"}
+info: Received login request: {"username":"testuser"}
+warn: Incorrect password: {"password":"$2b$10$ffLNPvhHFtwdUpTkl9MaDOuyXL1cXwUZe7SQV.8PswI8AeCcjx.IG"}
+info: Received login request: {"username":"testuser"}
+info: User logged in successfully: {"username":"testuser"}
+info: Received login request: {"username":"testuser123"}
+warn: User does not exist: {"username":"testuser123"}
+info: Received login request: {"username":"testuser123"}
+warn: User does not exist: {"username":"testuser123"}
+info: Received login request: {"username":"testuser"}
+warn: Incorrect password: {"username":"testuser"}
+info: Received registration request: {"email":"test2email@example.com","fullName":"Test User 2","username":"testuser2"}
+info: User created successfully: {"email":"test2email@example.com","username":"testuser2"}
+info: Received login request: {"username":"testuser2"}
+info: User logged in successfully: {"username":"testuser2"}
