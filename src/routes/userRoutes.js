@@ -4,7 +4,7 @@ const User = require('../db/models/user');
 const bcrypt = require('bcrypt');
 const winston = require('winston'); // Import Winston for logging
 const jwt = require('jsonwebtoken'); // Import JWT for creating tokens
-const passport = require('../../passport-config'); // Import passport-config.js
+const passport = require('../passport-config');
 
 // Create a logger instance
 const logger = winston.createLogger({
@@ -77,53 +77,55 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'User does not exist' });
     }
 
-    //use bycrypt to compare the password entered by the user with the password stored in the database
+    // use bcrypt to compare the password entered by the user with the password stored in the database
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-      
       logger.warn('Incorrect password:', { username });
       return res.status(401).json({ message: 'Incorrect password' });
     }
 
-    //Create a JSON Web Token if username and password are correct
-    const token = jwt.sign({sub: user._id,username: user.username}, 'your-secret-key', { expiresIn: '7d' });
+    // Create a new JSON Web Token with the updated password
+    const token = jwt.sign({ sub: user._id, username: user.username }, 'your-secret-key', { expiresIn: '7d' });
 
     logger.info('User logged in successfully:', { username });
-    res.status(200).json({ message: 'User logged in successfully' });
+    res.status(200).json({ message: 'User logged in successfully', token });
+
   } catch (error) {
     logger.error('Error during user login:', { error });
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
+
 //User profile management routes
 
 //get user profile
 router.get('/profile',passport.authenticate('jwt', {session : false}), async (req, res) => {
         try{
-            //fetch user profile from the database
-            const userProfile = await User.findOne({username: req.user.username});
+          //fetch user profile from the database
+          const userProfile = await User.findOne({username: req.user.username});
 
-            if (!userProfile){
-                return res.status(404).json({message: 'User profile not found'});
-            }
+          if (!userProfile){
+            return res.status(404).json({message: 'User profile not found'});
+          }
 
-            //send the user profile to the user
-            res.status(200).json({userProfile}); //replace this with your user profile page HTML file
+          //send the user profile to the user
+          //console.log('userProfile:', userProfile);
+          res.status(200).json({userProfile}); //replace this with your user profile page HTML file
         } catch(error){
-            console.error('Error fetching user profile:', error);
-            res.status(500).json({ error: 'Internal Server Error' });
+          console.error('Error fetching user profile:', error);
+          res.status(500).json({ error: 'Internal Server Error' });
         }
     });
 
 // Route to update user profile information
 router.put('/profile',passport.authenticate('jwt',{ session : false }) ,async (req, res) => {
   try {
-    const { username, email, fullName, bio, profilePicture } = req.body;
+    const { username, email, fullName, bio } = req.body;
 
     // Validate that at least one field is provided for the update
-    if (!fullName && !bio && !profilePicture && !email && !username) {
+    if (!fullName && !bio && !email && !username) {
       return res.status(400).json({ error: 'At least one field is required for the update' });
     }
 
@@ -131,13 +133,13 @@ router.put('/profile',passport.authenticate('jwt',{ session : false }) ,async (r
     const updateObject = {};
     if (fullName) updateObject.fullName = fullName;
     if (bio) updateObject.bio = bio;
-    if (profilePicture) updateObject.profilePicture = profilePicture;
+
     if (email) updateObject.email = email;
     if (username) updateObject.username = username;
 
     // Update user profile information in the database
     const updatedProfile = await User.findOneAndUpdate(
-      { username: username }, // Find the user profile by username
+      { email: email }, // Find the user profile by email
       { $set: updateObject }, // Update the user profile with the updateObject
       { new: true } // Return the updated user profile
     );
@@ -157,70 +159,68 @@ router.put('/profile',passport.authenticate('jwt',{ session : false }) ,async (r
   }
 });
 
-  // Route to delete user profile
-router.delete('/profile', async (req, res) => {
-    try {
-      const {username, _id} = req.body;
-  
-      // Delete user profile information from the database
-      const deletedProfile = await User.findByIdAndDelete(_id);
-  
-      if (!deletedProfile) {
-        return res.status(404).json({ error: 'User profile not found' });
-      }
-  
-      // Respond with a success message or additional information as needed
-      res.status(200).json({ message: 'User profile deleted successfully' }); 
-    } catch (error) {
-      console.error('Error deleting user profile:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
+ // Route to delete user profile
+router.delete('/profile', passport.authenticate('jwt', { session: false }), async (req, res) => {
+  try {
+    const usernameToDelete = req.user.username;
+
+    // Delete user profile information from the database based on the username
+    const deletedProfile = await User.findOneAndDelete({ username: usernameToDelete });
+
+    if (!deletedProfile) {
+      return res.status(404).json({ error: 'User profile not found' });
     }
-  });
+
+    // Respond with a success message or additional information as needed
+    res.status(200).json({ message: 'User profile deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting user profile:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
   
   //change user password
-  router.put('/change-password', async (req, res) => {
-    try {
-      const { username, email, currentPassword, newPassword } = req.body;
+router.put('/change-password', async (req, res) => {
+  try {
+    const { username, currentPassword, newPassword } = req.body;
 
-      // Validate current password
+    // Validate current password
     if (!currentPassword || currentPassword.length < 8) {
       return res.status(400).json({ error: 'Current password must be provided and at least 8 characters long' });
     }
 
-     // Validate new password complexity
-     if (!newPassword || newPassword.length < 8) {
+    // Validate new password complexity
+    if (!newPassword || newPassword.length < 8) {
       return res.status(400).json({ error: 'New password must be at least 8 characters long' });
     }
-  
-      // Determine which field (username or email) was provided
-      const userField = username ? 'username' : 'email';
-      const userValue = username || email;
-  
-      // Find the user in the database
-      const user = await User.findOne({ [userField]: userValue });
-  
-      // Check if the user exists
-      if (!user) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-  
-      // Verify the current password
-      const isPasswordValid = await user.comparePassword(currentPassword);
-      if (!isPasswordValid) {
-        return res.status(401).json({ error: 'Invalid current password' });
-      }
-  
-      // Update the password
-      user.password = await bcrypt.hash(newPassword, 10);
-      await user.save();
-  
-      // Respond with a success message
-      res.status(200).json({ message: 'Password changed successfully' }); //show this message on the user profile page
-    } catch (error) {
-      console.error('Error changing password:', error);
-      res.status(500).json({ error: 'Internal Server Error' });
+
+    // Find the user in the database
+    const user = await User.findOne({ username });
+
+    // Check if the user exists
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
-  });
+
+    // Verify the current password
+    const isPasswordValid = await user.comparePassword(currentPassword);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid current password' });
+    }
+
+    // Update the password
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    // Respond with a success message
+    res.status(200).json({ message: 'Password changed successfully' }); //show this message on the user profile page
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 
 
 module.exports = router;
